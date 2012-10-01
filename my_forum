@@ -1,0 +1,232 @@
+#!/usr/bin/env perl
+
+use Mojolicious::Lite;
+use DBI;
+use DateTime;
+use Digest::SHA1 qw(sha1_hex);
+use MojoX::Session;
+use MojoX::Session::Store::Dbi;
+
+use constant RESULTS_PER_PAGE => 10;
+
+my $dbh = DBI->connect( 'dbi:SQLite:dbname=./db/my_forum.db',
+    '', '', { RaiseError => 1 } );
+
+#- Routes -----------------------------------------------------------------------
+
+get '/' => sub { shift->stash( error => undef ) } => 'index';
+
+post '/new_user' => sub {
+    my $self      = shift;
+    my $user      = $self->param('user');
+    my $password  = $self->param('password');
+    my $password2 = $self->param('password2');
+
+    my $error = validate( $user, '', $password, $password2 );
+
+    if ($error) {
+        $self->stash( error => $error );
+        return $self->render('register');
+    }
+
+    create_user( $user, $password );
+    create_session( $user, $self->tx );
+
+    return $self->redirect_to('/registered');
+};
+
+post '/login' => sub {
+    my $self     = shift;
+    my $user     = $self->param('user');
+    my $password = sha1_hex( $self->param('password') );
+
+    my $sth = $dbh->prepare(
+        qq{SELECT * FROM users WHERE nick = '$user' AND password = '$password'}
+    );
+
+    $sth->execute;
+
+    if ( my $row = $sth->fetchrow_hashref ) {
+        create_session( $row->{nick}, $self->tx );
+        $self->redirect_to('/registered');
+    }
+
+    else {
+        $self->stash( error => 'Invalid username or password' );
+        $self->render('index');
+    }
+
+};
+
+get '/register' => sub { shift->stash( error => undef ) } => 'register';
+
+group {
+
+    under '/registered' => sub {
+        my $self = shift;
+
+        return 1 if fetch_session($self);
+        $self->redirect_to('/');
+        return;
+    };
+
+    post '/new_post' => sub {
+        my $self      = shift;
+        my $text      = $self->param('text');
+        my $timestamp = "" . DateTime->now( time_zone => 'local' );
+
+        create_post( $self->stash('user'), $timestamp, $text );
+
+        return $self->redirect_to('/registered');
+    };
+
+    get '/' => sub {
+        my $self = shift;
+        my $offset = $self->param('offset') || 0;
+
+        my $posts = fetch_posts( $offset, RESULTS_PER_PAGE );
+
+        my $next_page     = $offset + RESULTS_PER_PAGE;
+        my $previous_page = $offset - RESULTS_PER_PAGE;
+
+        $next_page =
+          scalar(@$posts) % RESULTS_PER_PAGE == 0 ? $next_page : undef;
+        $previous_page = $previous_page >= 0 ? $previous_page : undef;
+
+        $self->stash( next_page     => $next_page );
+        $self->stash( previous_page => $previous_page );
+        $self->stash( posts         => $posts );
+
+    } => 'posts';
+
+    get '/edit_user' => sub {
+        my $self = shift;
+
+        $self->stash( redirect_to => $self->param('redirect_to') );
+        $self->stash( user  => $self->param('user') ) if $self->param('user');
+        $self->stash( error => undef );
+    } => 'user';
+
+    post '/edit_user' => sub {
+        my $self        = shift;
+        my $user        = $self->param('user');
+        my $old_user    = $self->param('old_user');
+        my $password    = $self->param('password');
+        my $password2   = $self->param('password2');
+        my $redirect_to = $self->param('redirect_to');
+
+        $self->stash( 'user'        => $old_user );
+        $self->stash( 'redirect_to' => $redirect_to );
+
+        my $error = validate( $user, $old_user, $password, $password2 );
+    
+        if ($error) {
+            $self->stash( error => $error );
+            return $self->render('register');
+        }
+
+        update_user( $old_user, $user, $password );
+        $self->redirect_to( $redirect_to or '/registered' );
+    };
+
+    get '/logoff' => sub {
+        my $self = shift;
+        
+        my $session = fetch_session($self);
+        $session->expire;
+        $session->flush;
+        $self->redirect_to('/');
+    }
+
+};
+
+#- Helpers ----------------------------------------------------------------------
+
+sub create_user {
+    my ( $nick, $password ) = @_;
+
+    my $sth = $dbh->prepare('INSERT INTO users (nick,password) VALUES(?,?)');
+    $sth->execute( $nick, sha1_hex($password) );
+}
+
+sub create_post {
+    my ( $user, $timestamp, $text ) = @_;
+
+    my $sth =
+      $dbh->prepare('INSERT INTO posts (user,timestamp,text) VALUES(?,?,?)');
+    $sth->execute( $user, $timestamp, $text );
+
+}
+
+sub create_session {
+    my ( $user, $tx ) = @_;
+
+    my $session = MojoX::Session->new(
+        tx        => $tx,
+        store     => MojoX::Session::Store::Dbi->new( dbh => $dbh ),
+        transport => MojoX::Session::Transport::Cookie->new,
+        ip_match  => undef,
+    );
+
+    $session->create;
+    $session->data( user => $user );
+    $session->flush;
+}
+
+sub fetch_user {
+    my $nick = shift;
+
+    my $sth = $dbh->prepare('SELECT * FROM users WHERE nick = ?');
+    $sth->execute($nick);
+
+    return $sth->fetchrow_hashref;
+}
+
+sub fetch_posts {
+    my ( $offset, $limit ) = @_;
+
+    return $dbh->selectall_arrayref(
+        qq{SELECT user, timestamp, text FROM posts ORDER BY timestamp desc LIMIT $limit OFFSET $offset}
+    );
+}
+
+sub fetch_session {
+    my $self = shift;
+
+    my $session = MojoX::Session->new(
+        tx        => $self->tx,
+        store     => MojoX::Session::Store::Dbi->new( dbh => $dbh ),
+        transport => MojoX::Session::Transport::Cookie->new,
+        ip_match  => undef,
+    );
+
+    my $sid = $session->load;
+    return undef unless $sid and not $session->is_expired;
+
+    $self->stash( user => $session->data('user') );
+    return $session;
+}
+
+sub is_valid_user {
+    my $nick = shift;
+    return defined fetch_user($nick);
+}
+
+sub update_user {
+    my ( $old_nick, $nick, $password ) = @_;
+
+    my $sth =
+      $dbh->prepare('UPDATE users SET nick = ?, password = ? WHERE nick = ?');
+    $sth->execute( $nick, sha1_hex($password), $old_nick );
+}
+
+sub validate {
+    my ( $user, $old, $password, $password2 ) = @_;
+
+    return 'Username already exists' if $old ne $user and is_valid_user($user);
+    return 'User is required'     if $user     =~ /^\s*$/;
+    return 'Password is required' if $password =~ /^\s*$/;
+    return 'Passwords don\'t match' if $password ne $password2;
+}
+
+app->start;

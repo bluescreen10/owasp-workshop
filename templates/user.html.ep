@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Edit user</title>
+    <link href="/css/base.css" rel="stylesheet" />
+  </head>
+  <body>
+    <div class="container">
+
+      <ul id="nav">
+        <li><a href="/registered/edit_user/?user=<%= $user %>&redirect_to=/registered">My Profile</a>
+        <li><a href="/registered/logoff">Log off</a>
+      </ul>
+
+      <h1>Edit user</h1>
+
+      <div class="mod alt">
+        <% if($error) { %>
+        <div class="alert-error"><%= $error %></div>
+        <% } %>
+        <form id="update" action="/registered/edit_user?redirect_to=<%= $redirect_to %>" method="POST">
+          <fieldset>
+            <label>New username</label>
+            <input type="text" name="user" value="<%= $user %>" />
+          </fieldset>
+          <fieldset>
+            <label>Password</label>
+            <input type="password" name="password" />
+          </fieldset>
+          <fieldset>
+            <label>Re-type Password</label>
+            <input type="password" name="password2" />
+          </fieldset>
+          <fieldset>
+            <button type="submit">Update</button>
+          </fieldset>
+          <input type="hidden" name="old_user" value="<%= $user %>" />
+        </form>
+      </div>
+
+    </div>
+
+  </body>
+</html>
+          

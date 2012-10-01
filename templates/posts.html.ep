@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Posts</title>
+    <link href="/css/base.css" rel="stylesheet" />
+  </head>
+  <body>
+    <div class="container">
+      <ul id="nav">
+        <li><a href="/registered/edit_user/?user=<%= $user %>&redirect_to=/registered">My Profile</a>
+        <li><a href="/registered/logoff">Log off</a>
+      </ul>
+      <h1>Recent Activity</h1>
+
+      <% for my $post (@$posts) { %>
+      <div>
+        <p class="post"><%= Mojo::ByteStream->new($post->[2]) %></p>
+        <p class="meta">
+          Created by <%= $post->[0] %> on <%= $post->[1] %>
+        </p>
+      </div>
+      <hr>
+      <% } %>
+
+      <% if (defined $previous_page) { %>
+      <a href="/registered?offset=<%= $previous_page %>">Previous page</a>
+      <% } %>
+
+      <% if (defined $next_page) { %>
+      <a href="/registered?offset=<%= $next_page %>">Next page</a>
+      <% } %>
+      <form id="post" action="/registered/new_post" method="POST">
+        <fieldset>
+          <label>What's on your mind?</label>
+          <textarea rows="10" cols="100" name="text"></textarea>
+        </fieldset>
+        <fieldset>
+          <button type="submit">post</button>
+        </fieldset>
+      </form>
+
+    </div>
+  </body>
+</html>

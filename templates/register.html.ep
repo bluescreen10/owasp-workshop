@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Register new user</title>
+    <link href="/css/base.css" rel="stylesheet" />
+  </head>
+  <body>
+    <div class="container">
+
+      <h1>Register new user</h1>
+
+      <div class="mod alt">
+        <% if($error) { %>
+        <div class="alert-error"><%= $error %></div>
+        <% } %>
+        <form id="register" action="/new_user" method="POST">
+          <fieldset>
+            <label>Desired username</label>
+            <input type="text" name="user" />
+          </fieldset>
+          <fieldset>
+            <label>Password</label>
+            <input type="password" name="password" />
+          </fieldset>
+          <fieldset>
+            <label>Re-type Password</label>
+            <input type="password" name="password2" />
+          </fieldset>
+          <fieldset>
+            <button type="submit">Register</button>
+          </fieldset>
+        </form>
+      </div>
+
+    </div>
+
+  </body>
+</html>
+          
