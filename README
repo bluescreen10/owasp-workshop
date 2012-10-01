@@ -1,0 +1,22 @@
+OWASP Workshop
+==============
+
+Minimal application full of vulnerabilities to practice discovering them and different approaches to fix it. The application is built in Perl using Mojolicious.
+
+For more information please refer to https://www.owasp.org/index.php/Category:OWASP_Top_Ten_Project
+
+Installing
+==========
+
+$ git clone http://github.com/bluescreen10/owasp-workshop.git
+$ cd owasp-workshop
+$ carton install
+$ ./my_forum daemon
+
+Copyright and Licence
+=====================
+
+Copyright (C) 2012 Mariano Wahlmann
+
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
